@@ -1,0 +1,71 @@
+// Keeps every pin in this repo current: the two caddy images and the xcaddy
+// plugins in the Dockerfile, and the GitHub Actions. Renovate runs from
+// .github/workflows/renovate.yml.
+//
+// Nothing is offered until it has been public for a week, the same defence
+// against a poisoned or broken release that portainer-compose uses. It has to
+// happen here: ghcr.io gives Renovate no release dates, so portainer-compose
+// can't age this image itself.
+//
+// Most updates then merge themselves once the build and smoke test pass, and
+// merging publishes the image. The exceptions below get a pull request to read
+// and merge by hand.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    'docker:pinDigests',
+    'helpers:pinGitHubActionDigestsToSemver',
+    // The "# renovate: datasource=go depName=..." comments above each plugin ARG.
+    'customManagers:dockerfileVersions',
+  ],
+  timezone: 'Europe/London',
+  minimumReleaseAge: '7 days',
+  // A patch can then merge on its own while a minor waits for review.
+  separateMinorPatch: true,
+  // Renovate merges once checks pass; no branch protection needed.
+  platformAutomerge: false,
+
+  packageRules: [
+    {
+      description: 'Non-major updates merge themselves once CI passes',
+      matchUpdateTypes: ['minor', 'patch', 'digest'],
+      automerge: true,
+    },
+    {
+      description: "Renovate can't read its own version back once a digest is added, and would stop updating itself",
+      matchDatasources: ['docker'],
+      matchPackageNames: ['renovate/renovate'],
+      pinDigests: false,
+    },
+    {
+      description: 'The builder and runtime images must move to the same Caddy together',
+      matchDatasources: ['docker'],
+      matchPackageNames: ['caddy'],
+      groupName: 'Caddy',
+    },
+    {
+      description: 'A new Caddy minor can change Caddyfile behaviour, and the plugins have to catch up: review by hand',
+      matchDatasources: ['docker'],
+      matchPackageNames: ['caddy'],
+      matchUpdateTypes: ['minor'],
+      automerge: false,
+    },
+    {
+      description: 'Pre-1.0 plugins can break their config in a minor: review by hand',
+      matchDatasources: ['go'],
+      matchCurrentVersion: '<1.0.0',
+      matchUpdateTypes: ['minor'],
+      automerge: false,
+    },
+    {
+      description: 'caddy-security guards internet-facing sites, and 1.2 onwards is a rewrite: review by hand',
+      matchPackageNames: ['github.com/greenpau/caddy-security'],
+      matchUpdateTypes: ['minor', 'major'],
+      automerge: false,
+      prBodyNotes: [
+        'caddy-security rewrote much of its Caddyfile handling from v1.2.0 (go-authcrunch 1.3). The smoke test covers a portal and an authorization policy, not the whole of the Caddyfile on a3239, so try this image against the real one before merging.',
+      ],
+    },
+  ],
+}

@@ -1,0 +1,8 @@
+# Validated (never run) by test/smoke.sh: provisions the Cloudflare DNS provider
+# without asking for a certificate.
+example.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	respond ok
+}

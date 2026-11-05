@@ -1,0 +1,71 @@
+name: Renovate
+
+# Keeps every pin in this repo current; renovate.json5 says what merges itself.
+#
+# Self-hosted with a token, like portainer-compose, rather than the Renovate app.
+# It can't use this workflow's own GITHUB_TOKEN: pull requests and merges made
+# with that token don't start other workflows, so nothing would be tested or
+# published, and it isn't allowed to edit workflow files at all.
+#
+# Needs a fine-grained personal access token with access to this repo (the
+# portainer-compose one can cover both), stored as the RENOVATE_TOKEN secret,
+# with read and write access to Contents, Issues, Pull requests and Workflows.
+# Until it exists every run fails, so the gap can't go unnoticed.
+
+on:
+  schedule:
+    # Every six hours. An update that has passed its checks is merged on the
+    # run after its pull request goes green.
+    - cron: '53 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check the token is set
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+        run: |
+          if [[ -z $RENOVATE_TOKEN ]]; then
+            echo "::error::RENOVATE_TOKEN isn't set, so nothing in this repo is being updated. See the top of .github/workflows/renovate.yml."
+            exit 1
+          fi
+
+      - uses: renovatebot/github-action@2804199d260ad00c1fae0e9e842888369391c776 # v46.3.10
+        with:
+          token: ${{ secrets.RENOVATE_TOKEN }}
+          # Pulled from Docker Hub so Renovate gets release dates for itself,
+          # and its own updates wait a week like everything else.
+          renovate-image: renovate/renovate
+          # A plain version: Renovate stops tracking this input if it carries
+          # a digest (see renovate.json5).
+          renovate-version: 44.192.2
+        env:
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_REQUIRE_CONFIG: required
+          # Docker Hub refuses anonymous paging past 1,000 tags and Renovate then
+          # drops every release date for that image (renovate/renovate has far
+          # more). Tags come newest first, so ten pages covers recent releases.
+          RENOVATE_DOCKER_MAX_PAGES: '10'
+          LOG_LEVEL: info
+
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Re-enable this workflow so its schedule isn't switched off
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/renovate.yml/enable"

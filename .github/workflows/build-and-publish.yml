@@ -1,0 +1,125 @@
+name: Build and publish
+
+# Every push and PR builds both architectures and runs test/smoke.sh. Only main
+# publishes, so an update that fails the smoke test never reaches ghcr.io.
+#
+# Tags: the Caddy version (2.11.8), latest, and the full commit SHA. The version
+# tag moves when a plugin or base image is updated; the SHA tags never move.
+#
+# Everything in the image is pinned, so rebuilding a commit that is already
+# published gives the same Caddy. The weekly run proves the build still works,
+# publishes if main has moved past what :latest was built from, and keeps GitHub
+# from switching the schedule off (public repos lose their schedules after 60
+# days without activity, which is how this image got stuck on 2.11.2).
+
+on:
+  push:
+    # Renovate's branches are built through their pull requests instead.
+    branches-ignore: ['renovate/**']
+  pull_request:
+  schedule:
+    - cron: '41 5 * * 1' # Mondays, 05:41 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build for the smoke test (amd64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: caddy-custom:test
+          cache-from: type=gha
+
+      - name: Smoke test
+        run: test/smoke.sh caddy-custom:test
+
+      - name: Decide what to publish
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          version=$(docker run --rm caddy-custom:test caddy version | cut -d' ' -f1)
+          publish=false
+          if [[ $GITHUB_REF == refs/heads/main && $EVENT != pull_request ]]; then
+            publish=true
+            if [[ $EVENT == schedule ]]; then
+              built_from=$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{ json .Image }}' |
+                jq -r '.["linux/amd64"].config.Labels["org.opencontainers.image.revision"] // empty') || true
+              echo ":latest was built from ${built_from:-an unrecorded commit}"
+              [[ $built_from == "$GITHUB_SHA" ]] && publish=false
+            fi
+          fi
+          echo "Caddy ${version#v}; publish: $publish"
+          echo "version=${version#v}" >>"$GITHUB_OUTPUT"
+          echo "publish=$publish" >>"$GITHUB_OUTPUT"
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.plan.outputs.version }},priority=1000
+            type=raw,value=latest
+            type=sha,format=long,prefix=
+          # Without these the image keeps the official caddy image's labels,
+          # which point at caddyserver/caddy-docker rather than this repo.
+          labels: |
+            org.opencontainers.image.title=caddy-custom
+            org.opencontainers.image.description=Caddy with caddy-docker-proxy, caddy-security, Cloudflare DNS and layer4
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - if: steps.plan.outputs.publish == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build amd64 and arm64 (and push, on main)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ steps.plan.outputs.publish == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Re-enable this workflow so its schedule isn't switched off
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/build-and-publish.yml/enable"

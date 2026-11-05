@@ -1,0 +1,52 @@
+# Base Caddyfile for test/smoke.sh. It uses what a3239's real Caddyfile relies
+# on: a caddy-security portal and policy with the Azure driver, a snippet that
+# container labels import, and layer4 TCP proxying. Values are throwaway.
+{
+	security {
+		oauth identity provider azure {
+			realm azure
+			driver azure
+			tenant_id common
+			client_id 00000000-0000-0000-0000-000000000000
+			client_secret {env.AZURE_CLIENT_SECRET}
+			scopes openid email profile
+			# Fetch Azure's metadata in the background, so the test needs no network.
+			delay_start 5
+		}
+
+		authentication portal smokeportal {
+			crypto default token lifetime 3600
+			crypto key sign-verify {env.JWT_SHARED_KEY}
+			enable identity provider azure
+			cookie domain smoke.test
+			transform user {
+				match realm azure
+				action add role authp/user
+			}
+		}
+
+		authorization policy smokepolicy {
+			set auth url http://auth.smoke.test/
+			crypto key verify {env.JWT_SHARED_KEY}
+			allow roles authp/user
+		}
+	}
+
+	layer4 {
+		:6667 {
+			route {
+				proxy public:80
+			}
+		}
+	}
+}
+
+(common_smoke) {
+	header -Server
+}
+
+http://auth.smoke.test {
+	route {
+		authenticate with smokeportal
+	}
+}
