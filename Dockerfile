@@ -13,7 +13,7 @@ ARG CADDY_SECURITY_VERSION=v1.1.64
 # renovate: datasource=go depName=github.com/caddy-dns/cloudflare
 ARG CADDY_DNS_CLOUDFLARE_VERSION=v0.2.4
 # renovate: datasource=go depName=github.com/mholt/caddy-l4
-ARG CADDY_L4_VERSION=v0.1.2
+ARG CADDY_L4_VERSION=v0.1.3
 
 ARG TARGETOS TARGETARCH TARGETVARIANT
 RUN --mount=type=cache,target=/go/pkg/mod \
