@@ -4,7 +4,7 @@
 #
 # The builder runs on the build machine's own architecture and cross-compiles,
 # so the arm64 image needs no emulation.
-FROM --platform=$BUILDPLATFORM caddy:2.11.8-builder@sha256:212168c3a069fb6a18ced9e817f974c8a5ef21a41d305bcdb66ec0bd416079ef AS builder
+FROM --platform=$BUILDPLATFORM caddy:2.11.8-builder@sha256:d4eb070c36154bd2d4c94b40359a03c6168346d5af5404963c74691ab77fb63f AS builder
 
 # renovate: datasource=go depName=github.com/lucaslorentz/caddy-docker-proxy/v2
 ARG CADDY_DOCKER_PROXY_VERSION=v2.13.1
@@ -25,6 +25,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --with github.com/caddy-dns/cloudflare@${CADDY_DNS_CLOUDFLARE_VERSION} \
     --with github.com/mholt/caddy-l4@${CADDY_L4_VERSION}
 
-FROM caddy:2.11.8@sha256:f04f1e8d78da0c65ec6f81b4ea8d216849775f3bc3c87790d95fcb2ec3722f12
+FROM caddy:2.11.8@sha256:4fcafa98afd1c2e642e353e3c5cf9ddbe892fcee14bc990e7ba2c5b78e51f9cf
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 CMD ["caddy", "docker-proxy"]
