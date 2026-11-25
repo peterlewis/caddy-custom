@@ -9,7 +9,7 @@ FROM --platform=$BUILDPLATFORM caddy:2.11.8-builder@sha256:d4eb070c36154bd2d4c94
 # renovate: datasource=go depName=github.com/lucaslorentz/caddy-docker-proxy/v2
 ARG CADDY_DOCKER_PROXY_VERSION=v2.13.1
 # renovate: datasource=go depName=github.com/greenpau/caddy-security
-ARG CADDY_SECURITY_VERSION=v1.1.64
+ARG CADDY_SECURITY_VERSION=v1.7.0
 # renovate: datasource=go depName=github.com/caddy-dns/cloudflare
 ARG CADDY_DNS_CLOUDFLARE_VERSION=v0.2.4
 # renovate: datasource=go depName=github.com/mholt/caddy-l4
