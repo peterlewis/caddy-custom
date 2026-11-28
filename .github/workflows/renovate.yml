@@ -48,7 +48,7 @@ jobs:
           renovate-image: renovate/renovate
           # A plain version: Renovate stops tracking this input if it carries
           # a digest (see renovate.json5).
-          renovate-version: 44.251.0
+          renovate-version: 44.257.6
         env:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           RENOVATE_ONBOARDING: 'false'
